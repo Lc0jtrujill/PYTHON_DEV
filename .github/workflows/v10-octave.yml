@@ -1,32 +1,73 @@
 name: V10 homogeneous Octave benchmark
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [v10-octave-benchmark]
   workflow_dispatch:
 jobs:
   benchmark:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     strategy:
       fail-fast: false
+      max-parallel: 12
       matrix:
         alpha: ['0.30','0.50','0.70','0.90']
         final_time: ['1','10','50']
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
+      OCTAVE_HISTFILE: /dev/null
+      REPEATS: '5'
     steps:
       - uses: actions/checkout@v4
       - name: Install GNU Octave
         run: |
           sudo apt-get update
-          sudo apt-get install -y octave
+          sudo apt-get install -y octave unzip
           octave --version
+      - name: Download and verify official solver sources
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd fractional-pouzet-v10
+          curl -fL --retry 3 -o fhbvm.m https://people.dimai.unifi.it/brugnano/fhbvm/fhbvm.m
+          curl -fL --retry 3 -o fhbvm2.m https://people.dimai.unifi.it/brugnano/fhbvm/fhbvm2.m
+          curl -fL --retry 3 -o FLMM2_official.zip https://www.mathworks.com/matlabcentral/mlc-downloads/downloads/submissions/47081/versions/1/download/zip
+          unzip -oq FLMM2_official.zip
+          cp flmm2.m FLMM2.m
+          echo '7c7ef38d76431078277e7f1f8c93b20d6635842f7567e29634194f7936520016  fhbvm.m' | sha256sum -c -
+          echo '5a76f9acf5a8ce94c9c6f85e1c42c0555d31cae8e90f5bf2129d58dc3720a465  fhbvm2.m' | sha256sum -c -
+          echo '6b31c6dcc24561cfd11e81af8b1bff7e768c47f50339c0a696b97abfb0519260  FLMM2_official.zip' | sha256sum -c -
+          echo '8f0dd016ac9058cccd96caa1f7f094c0879ab040648fd4a22f52eb8b23cc60f5  FLMM2.m' | sha256sum -c -
+          sha256sum fhbvm.m fhbvm2.m FLMM2.m FLMM2_official.zip > official_SHA256SUMS.txt
+      - name: Record environment
+        shell: bash
+        run: |
+          cd fractional-pouzet-v10
+          {
+            uname -a
+            lscpu
+            octave --version
+            printf 'OPENBLAS_NUM_THREADS=%s\n' "$OPENBLAS_NUM_THREADS"
+            printf 'OMP_NUM_THREADS=%s\n' "$OMP_NUM_THREADS"
+          } > environment.txt
       - name: Run homogeneous benchmark
         env:
           ALPHA: ${{ matrix.alpha }}
           FINAL_TIME: ${{ matrix.final_time }}
         run: |
           cd fractional-pouzet-v10
-          octave --no-gui --quiet v10_benchmark_case.m
+          octave --no-gui --quiet --eval 'v10_benchmark_case'
       - uses: actions/upload-artifact@v4
         with:
           name: benchmark-a${{ matrix.alpha }}-T${{ matrix.final_time }}
-          path: fractional-pouzet-v10/benchmark_*.csv
+          path: |
+            fractional-pouzet-v10/benchmark_*.csv
+            fractional-pouzet-v10/environment.txt
+            fractional-pouzet-v10/official_SHA256SUMS.txt
           if-no-files-found: error
