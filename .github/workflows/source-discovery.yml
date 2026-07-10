@@ -1,0 +1,44 @@
+name: Discover official fractional solver sources
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download current official FHBVM sources
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p source-discovery/fhbvm source-discovery/flmm
+          curl -fL --retry 3 -o source-discovery/fhbvm/fhbvm.m https://people.dimai.unifi.it/brugnano/fhbvm/fhbvm.m
+          curl -fL --retry 3 -o source-discovery/fhbvm/fhbvm2.m https://people.dimai.unifi.it/brugnano/fhbvm/fhbvm2.m
+          sha256sum source-discovery/fhbvm/*.m | tee source-discovery/fhbvm/SHA256SUMS.txt
+          head -n 80 source-discovery/fhbvm/fhbvm2.m > source-discovery/fhbvm/fhbvm2_header.txt
+      - name: Discover archived official Garrappa software
+        shell: bash
+        run: |
+          set -euxo pipefail
+          base='https://web.archive.org/cdx/search/cdx'
+          curl -fL --retry 3 --get "$base" \
+            --data-urlencode 'url=www.dm.uniba.it/Members/garrappa/Software/*' \
+            --data-urlencode 'output=json' \
+            --data-urlencode 'filter=statuscode:200' \
+            --data-urlencode 'fl=timestamp,original,statuscode,mimetype,digest' \
+            --data-urlencode 'collapse=digest' \
+            -o source-discovery/flmm/cdx.json || true
+          curl -fL --retry 3 --get "$base" \
+            --data-urlencode 'url=www.dm.uniba.it/Members/garrappa/Software/FLMM2.m' \
+            --data-urlencode 'output=json' \
+            --data-urlencode 'filter=statuscode:200' \
+            --data-urlencode 'fl=timestamp,original,statuscode,mimetype,digest' \
+            -o source-discovery/flmm/flmm2_cdx.json || true
+          cat source-discovery/flmm/cdx.json || true
+          cat source-discovery/flmm/flmm2_cdx.json || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: official-source-discovery
+          path: source-discovery
+          if-no-files-found: error
