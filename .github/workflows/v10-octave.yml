@@ -2,8 +2,6 @@ name: V10 homogeneous Octave benchmark
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [v10-octave-benchmark]
   workflow_dispatch:
 jobs:
   benchmark:
@@ -49,13 +47,7 @@ jobs:
         shell: bash
         run: |
           cd fractional-pouzet-v10
-          {
-            uname -a
-            lscpu
-            octave --version
-            printf 'OPENBLAS_NUM_THREADS=%s\n' "$OPENBLAS_NUM_THREADS"
-            printf 'OMP_NUM_THREADS=%s\n' "$OMP_NUM_THREADS"
-          } > environment.txt
+          { uname -a; lscpu; octave --version; } > environment.txt
       - name: Run homogeneous benchmark
         env:
           ALPHA: ${{ matrix.alpha }}
