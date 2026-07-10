@@ -16,7 +16,7 @@ jobs:
           curl -fL --retry 3 -o source-discovery/fhbvm/fhbvm.m https://people.dimai.unifi.it/brugnano/fhbvm/fhbvm.m
           curl -fL --retry 3 -o source-discovery/fhbvm/fhbvm2.m https://people.dimai.unifi.it/brugnano/fhbvm/fhbvm2.m
           sha256sum source-discovery/fhbvm/*.m | tee source-discovery/fhbvm/SHA256SUMS.txt
-          head -n 80 source-discovery/fhbvm/fhbvm2.m > source-discovery/fhbvm/fhbvm2_header.txt
+          head -n 100 source-discovery/fhbvm/fhbvm2.m > source-discovery/fhbvm/fhbvm2_header.txt
       - name: Discover archived official Garrappa software
         shell: bash
         run: |
@@ -29,14 +29,21 @@ jobs:
             --data-urlencode 'fl=timestamp,original,statuscode,mimetype,digest' \
             --data-urlencode 'collapse=digest' \
             -o source-discovery/flmm/cdx.json || true
-          curl -fL --retry 3 --get "$base" \
-            --data-urlencode 'url=www.dm.uniba.it/Members/garrappa/Software/FLMM2.m' \
-            --data-urlencode 'output=json' \
-            --data-urlencode 'filter=statuscode:200' \
-            --data-urlencode 'fl=timestamp,original,statuscode,mimetype,digest' \
-            -o source-discovery/flmm/flmm2_cdx.json || true
-          cat source-discovery/flmm/cdx.json || true
-          cat source-discovery/flmm/flmm2_cdx.json || true
+          stamp=20220703222345
+          archived="https://web.archive.org/web/${stamp}id_/https://www.dm.uniba.it/members/garrappa/software"
+          curl -fL --retry 3 -o source-discovery/flmm/software.html "$archived"
+          grep -Eoi 'href=["'"'][^"'"']+["'"']' source-discovery/flmm/software.html | sed -E 's/^href=["'"']|["'"']$//g' | sort -u > source-discovery/flmm/links.txt || true
+          cat source-discovery/flmm/links.txt
+          for u in \
+            'https://web.archive.org/web/20220703222345id_/https://www.dm.uniba.it/Members/garrappa/Software/FLMM2.m' \
+            'https://web.archive.org/web/20220703222345id_/https://www.dm.uniba.it/members/garrappa/software/FLMM2.m' \
+            'https://web.archive.org/web/20220703222345id_/https://www.dm.uniba.it/Members/garrappa/Software/flmm2.m' \
+            'https://web.archive.org/web/20220703222345id_/https://www.dm.uniba.it/members/garrappa/software/flmm2.m'; do
+              if curl -fL --retry 2 -o source-discovery/flmm/FLMM2.m "$u"; then break; fi
+          done
+          test -s source-discovery/flmm/FLMM2.m
+          head -n 120 source-discovery/flmm/FLMM2.m > source-discovery/flmm/FLMM2_header.txt
+          sha256sum source-discovery/flmm/FLMM2.m > source-discovery/flmm/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: official-source-discovery
