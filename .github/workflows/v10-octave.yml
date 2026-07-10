@@ -2,19 +2,17 @@ name: V10 homogeneous Octave benchmark
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [v10-benchmark-run]
   workflow_dispatch:
 jobs:
   benchmark:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 12
+      max-parallel: 1
       matrix:
-        alpha: ['0.30','0.50','0.70','0.90']
-        final_time: ['1','10','50']
+        alpha: ['0.50']
+        final_time: ['1']
     env:
       OPENBLAS_NUM_THREADS: '1'
       OMP_NUM_THREADS: '1'
@@ -22,7 +20,7 @@ jobs:
       VECLIB_MAXIMUM_THREADS: '1'
       NUMEXPR_NUM_THREADS: '1'
       OCTAVE_HISTFILE: /dev/null
-      REPEATS: '5'
+      REPEATS: '2'
     steps:
       - uses: actions/checkout@v4
       - name: Install GNU Octave
@@ -59,7 +57,7 @@ jobs:
           octave --no-gui --quiet --eval 'v10_benchmark_case'
       - uses: actions/upload-artifact@v4
         with:
-          name: benchmark-a${{ matrix.alpha }}-T${{ matrix.final_time }}
+          name: benchmark-smoke-a${{ matrix.alpha }}-T${{ matrix.final_time }}
           path: |
             fractional-pouzet-v10/benchmark_*.csv
             fractional-pouzet-v10/environment.txt
