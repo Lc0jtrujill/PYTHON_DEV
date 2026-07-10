@@ -1,0 +1,32 @@
+name: V10 homogeneous Octave benchmark
+on:
+  push:
+    branches: [v10-octave-benchmark]
+  workflow_dispatch:
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        alpha: ['0.30','0.50','0.70','0.90']
+        final_time: ['1','10','50']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GNU Octave
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y octave
+          octave --version
+      - name: Run homogeneous benchmark
+        env:
+          ALPHA: ${{ matrix.alpha }}
+          FINAL_TIME: ${{ matrix.final_time }}
+        run: |
+          cd fractional-pouzet-v10
+          octave --no-gui --quiet v10_benchmark_case.m
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-a${{ matrix.alpha }}-T${{ matrix.final_time }}
+          path: fractional-pouzet-v10/benchmark_*.csv
+          if-no-files-found: error
