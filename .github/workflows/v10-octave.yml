@@ -2,6 +2,8 @@ name: V10 homogeneous Octave benchmark
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [v10-benchmark-run]
   workflow_dispatch:
 jobs:
   benchmark:
