@@ -1,0 +1,1 @@
+Trigger the pull-request aggregate benchmark after the base branch acquired the workflow definition.
