@@ -1,7 +1,5 @@
-name: Discover official fractional solver sources
+name: Discover official fractional solver sources (manual)
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 jobs:
   discover:
@@ -25,30 +23,18 @@ jobs:
           found=''
           for v in $(seq 1 12); do
             url="https://www.mathworks.com/matlabcentral/mlc-downloads/downloads/submissions/47081/versions/${v}/download/zip"
-            if curl -fL --retry 2 -o "source-discovery/flmm/candidates/v${v}.zip" "$url" && unzip -tq "source-discovery/flmm/candidates/v${v}.zip"; then
-              found="$v"
-            else
-              rm -f "source-discovery/flmm/candidates/v${v}.zip"
-            fi
+            if curl -fL --retry 2 -o "source-discovery/flmm/candidates/v${v}.zip" "$url" && unzip -tq "source-discovery/flmm/candidates/v${v}.zip"; then found="$v"; else rm -f "source-discovery/flmm/candidates/v${v}.zip"; fi
           done
           test -n "$found"
           cp "source-discovery/flmm/candidates/v${found}.zip" source-discovery/flmm/FLMM2_official.zip
           unzip -oq source-discovery/flmm/FLMM2_official.zip -d source-discovery/flmm/release
-          find source-discovery/flmm/release -type f -maxdepth 4 -print
           flmm=$(find source-discovery/flmm/release -type f -iname 'flmm2.m' | head -n 1)
           test -n "$flmm"
           cp "$flmm" source-discovery/flmm/FLMM2.m
           head -n 160 source-discovery/flmm/FLMM2.m > source-discovery/flmm/FLMM2_header.txt
           printf '%s\n' "$found" > source-discovery/flmm/file_exchange_version_id.txt
           sha256sum source-discovery/flmm/FLMM2_official.zip source-discovery/flmm/FLMM2.m > source-discovery/flmm/SHA256SUMS.txt
-      - name: Preserve archived provenance page
-        shell: bash
-        continue-on-error: true
-        run: |
-          mkdir -p source-discovery/flmm
-          curl --compressed -L --retry 3 -o source-discovery/flmm/software_archived.html 'https://web.archive.org/web/20220703222345id_/https://www.dm.uniba.it/members/garrappa/software'
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: official-source-discovery
           path: source-discovery
