@@ -1,0 +1,38 @@
+name: Discover official FLMM2 download
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe File Exchange and direct archive endpoints
+        shell: bash
+        run: |
+          set -u
+          mkdir -p discovery
+          page='https://www.mathworks.com/matlabcentral/fileexchange/47081-flmm2'
+          curl -fL --retry 3 -A 'Mozilla/5.0' "$page" -o discovery/page.html || true
+          grep -Eo 'https?://[^" ]+(mlc-downloads|47081)[^" ]+' discovery/page.html | sort -u > discovery/urls_from_page.txt || true
+          for v in $(seq 1 30); do
+            u="https://www.mathworks.com/matlabcentral/mlc-downloads/downloads/submissions/47081/versions/${v}/download/zip"
+            code=$(curl -L -sS -A 'Mozilla/5.0' -o "discovery/candidate_${v}.bin" -w '%{http_code}' "$u" || true)
+            size=$(wc -c < "discovery/candidate_${v}.bin" 2>/dev/null || echo 0)
+            type=$(file -b "discovery/candidate_${v}.bin" 2>/dev/null || true)
+            printf '%s,%s,%s,%s\n' "$v" "$code" "$size" "$type" | tee -a discovery/candidates.csv
+            if unzip -tq "discovery/candidate_${v}.bin" >/dev/null 2>&1; then
+              cp "discovery/candidate_${v}.bin" discovery/FLMM2-official.zip
+              echo "$u" > discovery/selected_url.txt
+              break
+            fi
+          done
+          find discovery -maxdepth 1 -type f -printf '%f %s bytes\n' | sort > discovery/files.txt
+          cat discovery/candidates.csv || true
+          cat discovery/selected_url.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flmm2-discovery
+          path: discovery
+          if-no-files-found: error
