@@ -1,7 +1,5 @@
-name: Discover official FLMM2 download
+name: Discover official FLMM2 download (manual)
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 jobs:
   discover:
@@ -22,15 +20,8 @@ jobs:
             size=$(wc -c < "discovery/candidate_${v}.bin" 2>/dev/null || echo 0)
             type=$(file -b "discovery/candidate_${v}.bin" 2>/dev/null || true)
             printf '%s,%s,%s,%s\n' "$v" "$code" "$size" "$type" | tee -a discovery/candidates.csv
-            if unzip -tq "discovery/candidate_${v}.bin" >/dev/null 2>&1; then
-              cp "discovery/candidate_${v}.bin" discovery/FLMM2-official.zip
-              echo "$u" > discovery/selected_url.txt
-              break
-            fi
+            if unzip -tq "discovery/candidate_${v}.bin" >/dev/null 2>&1; then cp "discovery/candidate_${v}.bin" discovery/FLMM2-official.zip; echo "$u" > discovery/selected_url.txt; break; fi
           done
-          find discovery -maxdepth 1 -type f -printf '%f %s bytes\n' | sort > discovery/files.txt
-          cat discovery/candidates.csv || true
-          cat discovery/selected_url.txt || true
       - uses: actions/upload-artifact@v4
         with:
           name: flmm2-discovery
