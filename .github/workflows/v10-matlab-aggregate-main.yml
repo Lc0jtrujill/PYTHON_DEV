@@ -1,5 +1,7 @@
 name: V10 official homogeneous MATLAB benchmark
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
     paths:
@@ -59,6 +61,7 @@ jobs:
             v10_benchmark_case;
             end, end
       - name: Publish raw results and environment
+        if: github.event_name == 'push'
         shell: bash
         run: |
           set -euxo pipefail
@@ -77,5 +80,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: matlab-benchmark-full-factorial
-          path: fractional-pouzet-v10/results
+          path: |
+            fractional-pouzet-v10/benchmark_*.csv
+            fractional-pouzet-v10/host_environment.txt
+            fractional-pouzet-v10/matlab_environment.txt
+            fractional-pouzet-v10/official_SHA256SUMS.txt
           if-no-files-found: error
