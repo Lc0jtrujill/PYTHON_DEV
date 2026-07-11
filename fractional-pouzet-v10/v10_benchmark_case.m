@@ -1,6 +1,10 @@
 function v10_benchmark_case
-% Homogeneous GNU Octave benchmark for official FLMM2/FHBVM2 and P2/P3/P4.
+% Homogeneous MATLAB benchmark for official FLMM2/FHBVM/FHBVM2 and P2/P3/P4.
+% All solvers are timed in the same MATLAB process and precision.  The
+% manufactured solution is smooth and the Pouzet starts use the computable
+% truncation y=1; no exact startup values are injected.
 more off; warning('off','all'); format long g;
+try, maxNumCompThreads(1); catch, end %#ok<MAXNCT>
 global V10_ALPHA V10_T V10_LAMBDA V10_MU
 V10_ALPHA = str2double(getenv('ALPHA'));
 V10_T = str2double(getenv('FINAL_TIME'));
@@ -8,69 +12,96 @@ if isnan(V10_ALPHA), V10_ALPHA=0.5; end
 if isnan(V10_T), V10_T=1; end
 V10_LAMBDA=-0.2; V10_MU=0.1;
 reps = str2double(getenv('REPEATS')); if isnan(reps), reps=5; end
-Ns = [32 64 128 256];
+levels = [32 64 128 256];
 outfile = sprintf('benchmark_a%.2f_T%g.csv',V10_ALPHA,V10_T);
 fid=fopen(outfile,'w');
-fprintf(fid,'alpha,T,method,N,nout,error,cpu_median,cpu_iqr,nfev,status,octave_version\n');
-methods={'P2--PI2','P3--PI3','P4--PI4','FLMM2-BDF','FHBVM2'};
+fprintf(fid,['alpha,T,method,level,parameter,nout,error,cpu_median,cpu_q1,' ...
+             'cpu_q3,cpu_iqr,solver_reported_time,nfev,status,matlab_version\n']);
+methods={'P2--PI2','P3--PI3','P4--PI4','FLMM2-BDF','FHBVM','FHBVM2'};
 for im=1:numel(methods)
   method=methods{im};
-  for N=Ns
-    [t,y,nfev,status,times]=run_repeated(method,N,reps);
-    if isempty(t) || any(~isfinite(y(:)))
+  for ilev=1:numel(levels)
+    level=levels(ilev);
+    [t,y,nfev,status,times,reported,param]=run_repeated(method,level,ilev,reps);
+    if isempty(t) || isempty(y) || any(~isfinite(y(:)))
       err=NaN; nout=0;
     else
       ye=v10_exact_smooth(t(:)); yy=y(:);
-      err=max(abs(yy-ye)./(1+abs(ye))); nout=numel(t);
+      if numel(yy)~=numel(ye)
+        err=NaN; status=['fail:output-size-' num2str(numel(yy)) '-vs-' num2str(numel(ye))];
+      else
+        err=max(abs(yy-ye)./(1+abs(ye))); nout=numel(t);
+      end
     end
     st=sort(times(isfinite(times)));
-    if isempty(st), med=NaN; iq=NaN;
+    if isempty(st)
+      med=NaN; q1=NaN; q3=NaN; iq=NaN;
     else
-      med=median(st); iq=st(max(1,ceil(.75*numel(st))))-st(max(1,ceil(.25*numel(st))));
+      med=median(st); q1=local_quantile(st,.25); q3=local_quantile(st,.75); iq=q3-q1;
     end
-    fprintf(fid,'%.17g,%.17g,%s,%d,%d,%.17g,%.17g,%.17g,%.17g,%s,%s\n',...
-      V10_ALPHA,V10_T,method,N,nout,err,med,iq,nfev,status,version);
-    fprintf('%s alpha=%.2f T=%g N=%d err=%.3e cpu=%.4g [%s]\n',method,V10_ALPHA,V10_T,N,err,med,status);
+    safe_status=strrep(strrep(status,',',';'),sprintf('\n'),' ');
+    safe_version=strrep(version,',',';');
+    fprintf(fid,['%.17g,%.17g,%s,%d,%.17g,%d,%.17g,%.17g,%.17g,%.17g,' ...
+                 '%.17g,%.17g,%.17g,%s,%s\n'], ...
+      V10_ALPHA,V10_T,method,level,param,nout,err,med,q1,q3,iq,reported,nfev,...
+      safe_status,safe_version);
+    fprintf('%s alpha=%.2f T=%g level=%d param=%g err=%.3e cpu=%.4g [%s]\n',...
+      method,V10_ALPHA,V10_T,level,param,err,med,status);
   end
 end
 fclose(fid);
 end
 
-function [t,y,nfev,status,times]=run_repeated(method,N,reps)
+function q=local_quantile(x,p)
+x=sort(x(:)); n=numel(x); pos=1+(n-1)*p; lo=floor(pos); hi=ceil(pos);
+if lo==hi, q=x(lo); else, q=x(lo)+(pos-lo)*(x(hi)-x(lo)); end
+end
+
+function [t,y,nfev,status,times,reported,param]=run_repeated(method,level,ilev,reps)
 try
-  [t,y,nfev]=run_method(method,N); status='ok';
+  [t,y,nfev,reported,param]=run_method(method,level,ilev); status='ok';
 catch err
-  t=[];y=[];nfev=NaN;status=['fail:' regexprep(err.message,',',';')];
+  t=[]; y=[]; nfev=NaN; reported=NaN; param=NaN;
+  status=['fail:' regexprep(err.message,',',';')];
 end
 times=NaN(1,reps);
 if strcmp(status,'ok')
+  % One untimed warm-up has already been executed above.
+  repvals=NaN(1,reps);
   for k=1:reps
     try
-      tic; [t,y,nfev]=run_method(method,N); times(k)=toc;
+      tic; [t,y,nfev,rt,param]=run_method(method,level,ilev); times(k)=toc; repvals(k)=rt;
     catch err
       status=['fail:' regexprep(err.message,',',';')]; break
     end
   end
+  rr=repvals(isfinite(repvals)); if ~isempty(rr), reported=median(rr); end
 end
 end
 
-function [t,y,nfev]=run_method(method,N)
+function [t,y,nfev,reported,param]=run_method(method,level,ilev)
 global V10_ALPHA V10_T
+reported=NaN;
 switch method
  case 'P2--PI2'
-  [t,y,nfev]=pouzet_uniform(2,N);
+  param=level; [t,y,nfev]=pouzet_uniform(2,param);
  case 'P3--PI3'
-  [t,y,nfev]=pouzet_uniform(3,N);
+  param=level; [t,y,nfev]=pouzet_uniform(3,param);
  case 'P4--PI4'
-  [t,y,nfev]=pouzet_uniform(4,N);
+  param=level; [t,y,nfev]=pouzet_uniform(4,param);
  case 'FLMM2-BDF'
-  h=V10_T/N;
+  param=level; h=V10_T/param;
   [t0,y0]=flmm2(V10_ALPHA,@(tt,yy)v10_problem_smooth(tt,yy),...
       @(tt,yy)v10_problem_smooth(tt,yy,1),0,V10_T,1,h,[],3,1e-12,100);
   t=t0(:); y=y0(:); nfev=NaN;
+ case 'FHBVM'
+  Mvals=[3 4 6 8]; param=Mvals(ilev);
+  [t0,y0,stats]=fhbvm(@v10_problem_smooth,1,V10_T,param);
+  t=t0(:); y=y0(:); nfev=NaN; reported=sum(stats(1:min(2,numel(stats))));
  case 'FHBVM2'
-  [t0,y0]=fhbvm2(@v10_problem_smooth,1,V10_T,N,1,1);
-  t=t0(:); y=y0(:); nfev=NaN;
+  param=level;
+  [t0,y0,etim]=fhbvm2(@v10_problem_smooth,1,V10_T,param,1,1);
+  t=t0(:); y=y0(:); nfev=NaN; reported=etim;
  otherwise
   error('unknown method')
 end
@@ -81,9 +112,11 @@ global V10_ALPHA V10_T
 alpha=V10_ALPHA; T=V10_T; q=stages; h=T/N;
 [c,A,b]=tableau(alpha,stages);
 t=linspace(0,T,N+1).'; y=zeros(N+1,1); rv=zeros(N+1,1);
-y(1:q+1)=v10_exact_smooth(t(1:q+1));
-for j=1:q+1, rv(j)=v10_problem_smooth(t(j),y(j)); end
-nfev=q+1;
+% Computable startup: exact solution is 1+O(t^(5+alpha)); y=1 has an
+% error O(h^(5+alpha)), above all target orders 1+s*alpha, s<=4.
+y(1:min(q+1,N+1))=1;
+for j=1:min(q+1,N+1), rv(j)=v10_problem_smooth(t(j),y(j)); end
+nfev=min(q+1,N+1);
 for n=q:N-1
   K=zeros(stages,1); K(1)=rv(n+1);
   for i=2:stages
@@ -103,9 +136,8 @@ if n<=0, H=0; return; end
 H=0;
 for p=0:n-1
   if p<q, idx=0:q; else, idx=(p-q+1):(p+1); end
-  off=idx-p; V=zeros(q+1,q+1);
-  for ii=1:q+1, V(ii,:)=off(ii).^(0:q); end
-  coef=V\vals(idx+1);
+  off=idx-p; Vinv=local_vinv(off);
+  coef=Vinv*vals(idx+1);
   AA=n+c-p; BB=AA-1; mom=zeros(q+1,1);
   for k=0:q
     mk=0;
@@ -118,6 +150,18 @@ for p=0:n-1
   H=H+coef.'*mom;
 end
 H=h^alpha/gamma(alpha)*H;
+end
+
+function Vinv=local_vinv(off)
+persistent keys vals
+if isempty(keys), keys={}; vals={}; end
+key=sprintf('%g,',off);
+for j=1:numel(keys)
+  if strcmp(keys{j},key), Vinv=vals{j}; return; end
+end
+q=numel(off)-1; V=zeros(q+1,q+1);
+for ii=1:q+1, V(ii,:)=off(ii).^(0:q); end
+Vinv=V\eye(q+1); keys{end+1}=key; vals{end+1}=Vinv;
 end
 
 function [c,A,b]=tableau(alpha,s)
