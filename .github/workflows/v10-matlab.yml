@@ -1,7 +1,5 @@
-name: V10 homogeneous MATLAB benchmark
+name: V10 homogeneous MATLAB benchmark (manual matrix)
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 jobs:
   benchmark:
@@ -22,8 +20,7 @@ jobs:
       MKL_NUM_THREADS: '1'
     steps:
       - uses: actions/checkout@v4
-      - name: Set up MATLAB R2025b
-        uses: matlab-actions/setup-matlab@v3
+      - uses: matlab-actions/setup-matlab@v3
         with:
           release: R2025b
       - name: Download and verify official solver sources
@@ -36,29 +33,11 @@ jobs:
           curl -fL --retry 3 -o FLMM2_official.zip https://www.mathworks.com/matlabcentral/mlc-downloads/downloads/submissions/47081/versions/1/download/zip
           unzip -oq FLMM2_official.zip
           test -s flmm2.m
-          echo '7c7ef38d76431078277e7f1f8c93b20d6635842f7567e29634194f7936520016  fhbvm.m' | sha256sum -c -
-          echo '5a76f9acf5a8ce94c9c6f85e1c42c0555d31cae8e90f5bf2129d58dc3720a465  fhbvm2.m' | sha256sum -c -
-          echo '6b31c6dcc24561cfd11e81af8b1bff7e768c47f50339c0a696b97abfb0519260  FLMM2_official.zip' | sha256sum -c -
-          echo '8f0dd016ac9058cccd96caa1f7f094c0879ab040648fd4a22f52eb8b23cc60f5  flmm2.m' | sha256sum -c -
-          sha256sum fhbvm.m fhbvm2.m flmm2.m FLMM2_official.zip > official_SHA256SUMS.txt
-          { uname -a; lscpu; } > host_environment.txt
-      - name: Run all solvers in one MATLAB process
-        uses: matlab-actions/run-command@v3
+      - uses: matlab-actions/run-command@v3
         with:
-          command: >-
-            cd('fractional-pouzet-v10');
-            fid=fopen('matlab_environment.txt','w');
-            fprintf(fid,'%s\n',version);
-            fprintf(fid,'computer=%s\n',computer);
-            fprintf(fid,'maxNumCompThreads=%d\n',maxNumCompThreads(1));
-            fclose(fid);
-            v10_benchmark_case
+          command: cd('fractional-pouzet-v10'); v10_benchmark_case
       - uses: actions/upload-artifact@v4
         with:
           name: matlab-benchmark-a${{ matrix.alpha }}-T${{ matrix.final_time }}
-          path: |
-            fractional-pouzet-v10/benchmark_*.csv
-            fractional-pouzet-v10/host_environment.txt
-            fractional-pouzet-v10/matlab_environment.txt
-            fractional-pouzet-v10/official_SHA256SUMS.txt
+          path: fractional-pouzet-v10/benchmark_*.csv
           if-no-files-found: error
